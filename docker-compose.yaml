@@ -1,0 +1,210 @@
+version: '3.8'
+
+services:
+    
+    php_apache:
+        container_name: www_w0ut
+        build:
+            context: ./docker/php_apache
+            dockerfile: Dockerfile
+        env_file:
+            - ./.env
+        environment:
+            LOG_STDOUT: ./docker/log_out.txt
+            LOG_STDERR: ./docker/log_err.txt
+        ports:
+            - ${HTTP_PORT}:80
+            - ${HTTPS_PORT}:443
+        volumes:
+            - ./www/project_1:/var/www/html
+            - ./conf/php/7.4/php.ini:/usr/local/etc/php/php.ini
+            - ./conf/apache/apache2.conf:/etc/apache2/apache2.conf
+            - ./conf/xdebug/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
+        depends_on:
+            - postgres
+        networks:
+            net:
+                aliases:
+                    - www_host
+            ipnet:
+                ipv4_address: 192.168.3.120
+    
+    nginx:
+        container_name: nginx_w0ut
+        image: nginx:stable-alpine
+        env_file:
+            - ./.env
+        ports:
+            - "${NGINX_PORT}:80"
+        volumes:
+            - ./www:/var/www
+            - ./conf/nginx:/etc/nginx/conf.d
+            - ./logs/nginx:/var/log/nginx/
+        depends_on:
+            - php-7.4
+            - postgres
+        restart: unless-stopped
+        environment:
+            TZ: ${WORKSPACE_TIMEZONE}
+        networks:
+            net:
+                aliases:
+                    - nginx_host
+            ipnet:
+                ipv4_address: 192.168.3.121
+
+    composer:
+        container_name: composer_w0ut
+        image: composer:latest
+        command: ["composer", "install"]
+        volumes:
+            - ./www/project_3:/app
+        networks:
+            net:
+                aliases:
+                    - composer_host
+
+    redis:
+        container_name: redis_w0ut
+        image: redis:latest
+        command: ["redis-server", "--appendonly", "yes", "--requirepass", "w0ut"]
+        env_file:
+            - ./.env
+        ports:
+            - "${REDIS_PORT}:6379"
+        volumes:
+            - ./database/redis/data:/var/lib/redis
+            - ./conf/redis:/usr/local/etc/redis/redis.conf
+        environment:
+            TZ: ${WORKSPACE_TIMEZONE}
+        networks:
+            net:
+                aliases:
+                    - redis_host
+
+    postgres:
+        container_name: pg_w0ut
+        build:
+            context: ./docker/postgres
+            dockerfile: Dockerfile
+        env_file:
+            - ./.env
+        environment:
+            POSTGRES_PASSWORD: ${POSTGRES_USER}
+            POSTGRES_USER: ${POSTGRES_PASSWORD}
+            POSTGRES_DB: ${POSTGRES_DB}
+            PGDATA: /var/lib/postgresql/data/pgdata
+            TZ: ${WORKSPACE_TIMEZONE}
+        command: ["postgres", "-c", "log_statement=all", "-c", "log_destination=stderr"]
+        ports: 
+            - ${POSTGRES_PORT}:5432
+        volumes:
+            - ./database/postgres:/var/lib/postgresql/data
+            - ./database/postgres/dump:/dump
+            - ./conf/postgres/postgresql.conf:/var/lib/postgresql/data/pgdata/postgresql.conf
+            - ./conf/postgres/pg_hba.conf:/var/lib/postgresql/data/pgdata/pg_hba.conf
+        networks:
+            net:
+                aliases:
+                    - pg_host
+            ipnet:
+                ipv4_address: 192.168.3.123
+        restart: always
+
+    mongo:
+        container_name: mongo_w0ut
+        image: mongo:4.2
+        env_file:
+            - ./.env
+        ports:
+            - "${MONGO_PORT}:27017"
+        volumes:
+            - ./database/mongo/db:/data/db
+            - ./conf/mongo/:/data/configdb
+            - ./database/mongo/dump:/dump
+        environment:
+            TZ: ${WORKSPACE_TIMEZONE}
+        networks:
+            net:
+                aliases:
+                    - mong_host
+
+    php-7.4:
+        container_name: php-7.4_w0ut
+        build:
+            context: ./docker/php
+            dockerfile: Dockerfile
+            args:
+                DOCKER_PHP_VERSION: '7.4'
+                DOCKER_PHP_ENABLE_XDEBUG: ${DOCKER_PHP_ENABLE_XDEBUG}
+                TZ: ${WORKSPACE_TIMEZONE}
+        env_file:
+            - ./.env
+        working_dir: /var/www
+        volumes:
+            - ./www:/var/www
+            - ./conf/php/7.4/php.ini:/usr/local/etc/php/php.ini
+            - ./conf/xdebug/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
+        ports:
+            - "${PHP_7_4_PORT}:9000"
+        networks:
+            net:
+                aliases:
+                    - php_7_4_host
+
+    php-7.3:
+        container_name: php-7.3_w0ut
+        build:
+            context: ./docker/php
+            dockerfile: Dockerfile
+            args:
+                DOCKER_PHP_VERSION: '7.3'
+                DOCKER_PHP_ENABLE_XDEBUG: ${DOCKER_PHP_ENABLE_XDEBUG}
+                TZ: ${WORKSPACE_TIMEZONE}
+        env_file:
+            - ./.env
+        working_dir: /var/www
+        volumes:
+            - ./www:/var/www
+            - ./conf/php/7.3/php.ini:/usr/local/etc/php/php.ini
+            - ./conf/xdebug/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
+        ports:
+            - "${PHP_7_3_PORT}:9000"
+        networks:
+            net:
+                aliases:
+                    - php_7_3_host
+
+    php-8.0:
+        container_name: php-8.0_w0ut
+        build:
+            context: ./docker/php
+            dockerfile: Dockerfile
+            args:
+                DOCKER_PHP_VERSION: '8.0'
+                DOCKER_PHP_ENABLE_XDEBUG: ${DOCKER_PHP_ENABLE_XDEBUG}
+                TZ: ${WORKSPACE_TIMEZONE}
+        env_file:
+            - ./.env
+        working_dir: /var/www
+        volumes:
+            - ./www:/var/www
+            - ./conf/php/8.0/php.ini:/usr/local/etc/php/php.ini
+        ports:
+            - "${PHP_8_0_PORT}:9000"
+        networks:
+            net:
+                aliases:
+                    - php_8_0_host
+
+networks:
+    net:
+        name: mynet
+        driver: bridge
+    ipnet:
+        driver: bridge
+        ipam:
+            driver: default
+            config:
+                - subnet: 192.168.3.0/24
+                  gateway: 192.168.3.2
